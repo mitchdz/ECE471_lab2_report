@@ -222,9 +222,21 @@ We know that the key was generated around 2018-04-17 23:08:49 plus or minus two 
 Figure~\ref{fig:t2p0} shows that the window of seconds since epoch are between 1524024529 and 1524038929.
 
 
+
+K - 
 fd89be04ce588454168062267d591d2e
 
+iv -
 
+openssl enc -aes-128-cbc -d -in C -K fd89be04ce588454168062267d591d2e -iv 09080706050403020100A2B2C2D2E2F2
+
+C="d06bf9d0dab8e8ef880660d2af65aa82"
+echo "${C}" > C
+
+
+
+
+\clearpage
 \subsection{Task 3: Measure the Entropy of Kernel}
 In the virtual world, it is difficult to create randomness, i.e., software alone is hard to create random numbers.
 Most systems resort to the physical world to gain the randomness. Linux gains the randomness from the
@@ -302,6 +314,7 @@ find . -iname "*i3*.conf"
 \end{verbatim}
 and the entropy gained incredibly fast! Searching the filesystem is awesome for entropy apparently.
 
+\clearpage
 \subsection{Task 4: Get Pseudo Random Numbers from /dev/random}
 Linux stores the random data collected from the physical resources into a random pool, and then uses
 two devices to turn the randomness into pseudo random numbers. These two devices are /dev/random
@@ -324,12 +337,127 @@ describe how you can launch a Denial-Of-Service (DOS) attack on such a server.
 \subsubsection{Task 4: Solution}
 
 
+\begin{figure}[H]
+    \begin{center}
+        \includegraphics[scale=0.6]{t4p0.png}
+    \end{center}{}
+    \caption{finding entropy of the system}
+    \label{fig:t4p0}
+\end{figure}
 
+Figure~\ref{fig:t4p0} shows the entropy of the system before executing the command.
+
+\begin{figure}[H]
+    \begin{center}
+        \includegraphics[scale=0.6]{t4p1.png}
+    \end{center}{}
+    \caption{finding entropy of the system}
+    \label{fig:t4p1}
+\end{figure}
+
+Figure~\ref{fig:t4p1} shows the entropy after executing the command and waiting for a while. The entropy keeps rising up to 64 and then immediately gets depleted back down to 0. This is because the block size of 64 bytes  that the command uses. The hexdump only produces another line once enough (64 bytes) of entropy is available. The entropy sped up when moving around the mouse rapidly.
+
+\begin{figure}[H]
+    \begin{center}
+        \includegraphics[scale=0.6]{t4p2.png}
+    \end{center}{}
+    \caption{finding entropy of the system}
+    \label{fig:t4p2}
+\end{figure}
+
+Figure~\ref{fig:t4p2} shows the entropy after killing the command with a ctr+c command. The entropy is able to finally rise above 64 bytes!
+
+To answer the question at the end, you can execute a DOS attack by simply executing the command cat /dev/random | hexdump with a lot of processes. Since /dev/random is a blocking command, it will halt the execution of other commands if there is not enough bits of entropy.
+
+\clearpage
 \subsection{Task 5: Get Random Numbers from /dev/urandom}
+Linux provides another way to access the random pool via the /dev/urandom device, except that this
+device will not block. Both /dev/random and /dev/urandom use the random data from the pool to
+generate pseudo random numbers. When the entropy is not sufficient, /dev/random will pause, while
+/dev/urandom will keep generating new numbers. Think of the data in the pool as the “seed”, and as we
+know, we can use a seed to generate as many pseudo random numbers as we want. \\
+\tab Let us see the behavior of /dev/urandom. We again use cat to get pseudo random numbers from
+this device. Please run the following command, and the describe whether moving the mouse has any effect
+on the outcome.
+\begin{verbatim}
+$ cat /dev/urandom | hexdump
+\end{verbatim}
+\tab Let us measure the quality of the random number. We can use a tool called ent, which has already been
+installed in our VM. According to its manual, “ent applies various tests to sequences of bytes stored in files
+and reports the results of those tests. The program is useful for evaluating pseudo-random number generators
+for encryption and statistical sampling applications, compression algorithms, and other applications where
+the information density of a file is of interest”. Let us first generate 1 MB of pseudo random number from
+/dev/urandom and save them in a file. Then we run ent on the file. Please describe your outcome, and
+analyze whether the quality of the random numbers is good or not.
+\begin{verbatim}
+$ head -c 1M /dev/urandom > output.bin
+$ ent output.bin
+\end{verbatim}
+\tab Theoretically speaking, the /dev/random device is more secure, but in practice, there is not much
+difference, because the “seed” used by /dev/urandom is random and non-predictable (/dev/urandom
+does re-seed whenever new random data become available). A big problem of the blocking behavior of
+/dev/random is that blocking can lead to denial of service attacks. Therefore, it is recommended that we
+use /dev/urandom to get random numbers. To do that in our program, we just need to read directly from
+this device file. The following code snippet shows how.
+\begin{verbatim}
+#define LEN 16
+// 128 bits
+unsigned char *key = (unsigned char *) malloc(sizeof(unsigned char)*LEN);
+FILE* random = fopen("/dev/urandom", "r");
+fread(key, sizeof(unsigned char)*LEN, 1, random);
+fclose(random);
+\end{verbatim}
+\tab Please modify the above code snippet to generate a 256-bit encryption key. Please compile and run your
+code; print out the numbers and include the screenshot in the report.
 
+\subsubsection{Task 5: Solution}
 
+\begin{figure}[H]
+    \begin{center}
+        \includegraphics[scale=0.6]{t5p0.png}
+    \end{center}{}
+    \caption{determining how random /dev/urandom is}
+    \label{fig:t5p0}
+\end{figure}
 
+Figure~\ref{fig:t5p0} shows the result of executing the code that this task asks to be executed. It appears that the entropy is 7.999797 bits per byte, which is very close an entropy of 1, which is considered completely random. This produced data is very random.
 
+In order to create the 256 bit encryption key, the following script is used:
+\begin{verbatim}
+#include <stdlib.h>
+#include <stdio.h>
+
+#define LEN 32
+
+int main() {
+        unsigned char *key = (unsigned char *) malloc(sizeof(unsigned char)*LEN);
+        FILE* randomFile = fopen("/dev/urandom", "r");
+        fread(key, sizeof(unsigned char)*LEN, 1, randomFile);
+        fclose(randomFile);
+
+        printf("%s\n", key);
+}
+\end{verbatim}
+
+\begin{figure}[H]
+    \begin{center}
+        \includegraphics[scale=0.6]{t5p2.png}
+    \end{center}{}
+    \caption{creating 256 bit encryption key}
+    \label{fig:t5p2}
+\end{figure}
+
+Figure~\ref{fig:t5p2} shows the results of running the custom script. The data is seemingly random. Let's determine exactly how random is is.
+
+\begin{figure}[H]
+    \begin{center}
+        \includegraphics[scale=0.6]{t5p3.png}
+    \end{center}{}
+    \caption{determining 256 bit random key entropy}
+    \label{fig:t5p3}
+\end{figure}
+
+Yikes. The entropy of 4.983788 bits per byte is not the best. But it's definitely not the worst!
 
 
 \end{document}
